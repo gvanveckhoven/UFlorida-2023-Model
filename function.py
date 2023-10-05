@@ -13,7 +13,7 @@ def simulate(init_values, rates, t_count):
     
     rates : parameter values 
     
-    t_count : Number of timeframes (each timeframe correlates to 1 hr)
+    t_count : Number of timeframes; as t_count -> 0, runtime and accuracy increase
 
     Returns
     -------
@@ -86,10 +86,20 @@ def simulate(init_values, rates, t_count):
     Immune_crit = rates[26]
     Active_crit = rates[27]
     y = rates[28]
+    count = 1
     
     #----------- 2. Calculating derivative values for each t > t_0
     
     for x in timesteps[1:]:
+        
+            
+        #---------- mechanism for repeating pathogenic insult ---------------------
+        
+        if count == 50 or count == 75:
+            N += 1800
+            count += 1
+        else:
+            count += 1
         
         #---------- 2a. Calculating individual terms ---------------
         "Function for E (exhaustion - dH/dt)"
@@ -160,7 +170,7 @@ def simulate(init_values, rates, t_count):
             mu_SA = 0
             
         elif P + N <= Immune_crit:
-            mu_SA = 0.2 * (A / Immune_crit) * S
+            mu_SA = 0.2 * ((P + N) / Immune_crit) * S
             
         else:
             mu_SA = 0.2 * S
