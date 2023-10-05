@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 from function import simulate
 
 H_0 = 1000
-N_0 = 3060
+N_0 = 0
 P_0 = 0
 A_0 = 0
-T_0 = 7000
+T_0 = 6000
 a_0 = 0.00
 b_0 = 1
 e_0 = 0.00
