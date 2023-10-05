@@ -13,7 +13,7 @@ def simulate(init_values, rates, t_count):
     
     rates : parameter values 
     
-    t_count : Number of timeframes; as t_count -> 0, runtime and accuracy increase
+    t_count : Number of timeframes (each timeframe correlates to 1 hr)
 
     Returns
     -------
@@ -23,7 +23,7 @@ def simulate(init_values, rates, t_count):
     '''
     #--------- 1. Initiliazing all values and parameters
     
-    timesteps = np.linspace(0, 100, t_count)
+    timesteps = np.linspace(0, t_count, t_count)
     
     H_0 = init_values[0]        # initial HSPC value
     N_0 = init_values[1]        # initial pathogen value
@@ -55,6 +55,7 @@ def simulate(init_values, rates, t_count):
     U_output = [U]
     P_output = [P]
     A_output = [A]
+    T_output = [T]
     
     g_N = rates[0]          # pathogen growth rate per hour
     K_PS = rates[1]         #
@@ -80,6 +81,11 @@ def simulate(init_values, rates, t_count):
     theta_ar = rates[21]
     theta_AS = rates[22]
     theta_UP = rates[23]
+    Immune_start = rates[24]
+    Active_start = rates[25]
+    Immune_crit = rates[26]
+    Active_crit = rates[27]
+    y = rates[28]
     
     #----------- 2. Calculating derivative values for each t > t_0
     
@@ -88,11 +94,11 @@ def simulate(init_values, rates, t_count):
         #---------- 2a. Calculating individual terms ---------------
         "Function for E (exhaustion - dH/dt)"
         
-        if ((P + S_n * N - S_a * A) < P_crit):
+        if (P + S_n * N - S_a * A) < P_crit:
             E = 1
-        elif ((P + S_n * N - S_a * a) >= P_crit):
+        elif (P + S_n * N - S_a * a) >= P_crit:
             try:
-                E = 2 - (2/(1+np.exp(-1 * w * (P + S_n * N - S_a * A - P_crit))))
+                E = 2 - (2/(1+np.exp(-1 * y * (P + S_n * N - S_a * A - P_crit))))
             except FloatingPointError:
                 E = 0
             
@@ -125,53 +131,63 @@ def simulate(init_values, rates, t_count):
         else:
             H_stable = 0
             
-        "Function for A_l (dS/dt - stable leukocyte kill rate)"
+        "Function for A_l (dS/dt - stable leukocyte kill rate by pathogens)"
         
         try:
             A_l = (k_tn * N) * ((-2/(1 + np.exp(w * S))) + 1)
-        except FloatingPointError:   
+        except FloatingPointError:
             A_l = k_tn * N
-            
+
         "Function for mu_SP"
         
-        mu_SP = 0.45*(np.power(P*S, 0.75)) / (np.power(P*S, 0.75) + np.power(theta_ps, 0.75))
-        
-        if mu_SP < 0:
+        if P + S_n*N - S_a*A <= Active_start:
             mu_SP = 0
+            
+        elif P + S_n*N - S_a*A <= Active_crit:
+            mu_SP = 0.2 * ((P + N) / Active_crit) * S
+            
+        else:
+            mu_SP = 0.2 * S
             
         "Function for mu_QA"
 
-        mu_QA = (np.power(A*Q, 0.75)) / (np.power(A*Q, 0.75) + np.power(theta_ar, 0.75))
-        if mu_QA < 0:
-            mu_QA = 0
+        mu_QA = (A*Q) / (theta_ar + A*Q)    # as of 10/4, not being used
+
             
         "Function for mu_SA"
         
-        mu_SA = 0.45*(np.power(A*S, 0.75)) / (np.power(A*S, 0.75) + np.power(theta_AS, 0.75))
+        if P + N <= Immune_start:
+            mu_SA = 0
+            
+        elif P + N <= Immune_crit:
+            mu_SA = 0.2 * (A / Immune_crit) * S
+            
+        else:
+            mu_SA = 0.2 * S
         
         "Function for mu_UP"
 
-        mu_UP = (np.power(U*(P+N), 0.75)) / (np.power(U*(P+N), 0.75) + np.power(theta_UP, 0.75))
+        mu_UP = (U*(P+N)) / (theta_UP + U*(P+N))    # as of 10/4, not being used
         
         "Function for D_P (dP/dt - pro-cytokine decay term"
 
-        D_P = 0.04 * P
+        D_P = 0.25 * P
         
         "Function for D_A (dA/dt - anti-cytokine decay term"
         
-        D_A = 0.03 * A
+        D_A = 0.25 * A
         
         "Function for D_S (S decay)"
         
-        D_S = 0.005 * S
+        D_S = (1/70) * S        # chosen to balance out +D in steady state
         
         "Function for D_Q (Q decay)"
         
-        D_Q = 0.01 * Q
+        D_Q = 0.25 * Q
         
         "Function for D_U (U decay)"
         
-        D_U = 0.002 * U
+        D_U = 0.05 * U
         
         #---------- 2b. Calculating derivatives ---------------------
         
@@ -179,32 +195,51 @@ def simulate(init_values, rates, t_count):
         
         dNdt = (g_N*N) * (1-(N/N_inf)) - (k_nq * Q) - (k_ns * S)        # Pathogen derivative
         
-        dPdt = (S_PS * S) + (S_PQ * Q) + (S_PH * H) - D_P - (K_PS * mu_SP) - (K_PU * mu_UP)     # Pro-inflammatory derivative
+        dPdt = (S_PS * S) + (S_PQ * Q) + (S_PH * H) - D_P     # Pro-inflammatory derivative
         
-        dAdt = (S_AU * U) + (S_AS * S) + (S_AH * H) - D_A - (K_AQ * mu_QA) - (K_AS * mu_SA)     # Anti-inflammatory derivative
+        dAdt = (S_AU * U) + (S_AS * S) + (S_AH * H) - D_A     # Anti-inflammatory derivative
         
-        dSdt = D - A_l - D_S + mu_QA*Q + mu_UP*U - mu_SA*S - mu_SP*S                            # Stable Leukocytes derivative
+        dSdt = D - A_l - D_S - mu_SA - mu_SP                            # Stable Leukocytes derivative
         
-        dQdt = mu_SP*S - mu_QA*Q - D_Q                                  # Active Leukocytes derivative
+        dQdt = mu_SP - D_Q                                  # Active Leukocytes derivative
         
-        dUdt = mu_SA*S - mu_UP*U - D_U                                  # Immuno-suppressive derivative
+        dUdt = mu_SA - D_U                                  # Immuno-suppressive derivative
         
+        #--------- 2c. Diagnostics --------------------------------
+        
+        #fill with code for checking variable values as needed
         
         #--------- 3. Updating lists and functions with linear approximation -------------
         
         H = dHdt + H        # control flow may affect function values
+        if H < 0:
+            H = 0
         
         N = dNdt + N
+        if N < 0:
+            N = 0
         
         S = dSdt + S
+        if S < 0:
+            S = 0
         
         Q = dQdt + Q
+        if Q < 0:
+            Q = 0
         
         U = dUdt + U
+        if U < 0:
+            U = 0
                 
         P = dPdt + P
+        if P < 0:
+            P = 0
         
         A = dAdt + A
+        if A < 0:
+            A = 0
+        
+        T = Q + U + S
         
         H_output.append(H)
         N_output.append(N)
@@ -213,10 +248,11 @@ def simulate(init_values, rates, t_count):
         S_output.append(S)
         Q_output.append(Q)
         U_output.append(U)
+        T_output.append(T)
         
     #------------- 4. Output --------------
     
-    output = np.array([H_output, N_output, P_output, A_output, S_output, Q_output, U_output])
+    output = np.array([H_output, N_output, P_output, A_output, S_output, Q_output, U_output, T_output])
     
     return output
     
