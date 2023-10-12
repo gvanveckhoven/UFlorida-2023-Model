@@ -3,8 +3,9 @@
 This is the main function that calculates the values for each individual function from the derivatives using linear approximation
 """
 import numpy as np
+import math
 
-def simulate(init_values, rates, t_count):
+def simulate(init_values, rates, t_count, inflate_H_bool=False, repeat_path_insult=False):
     '''
 
     Parameters
@@ -88,18 +89,12 @@ def simulate(init_values, rates, t_count):
     y = rates[28]
     count = 1
     
+    H_inflated = False
+    
     #----------- 2. Calculating derivative values for each t > t_0
     
     for x in timesteps[1:]:
         
-            
-        #---------- mechanism for repeating pathogenic insult ---------------------
-        
-        if count == 50 or count == 75:
-            N += 1800
-            count += 1
-        else:
-            count += 1
         
         #---------- 2a. Calculating individual terms ---------------
         "Function for E (exhaustion - dH/dt)"
@@ -154,10 +149,10 @@ def simulate(init_values, rates, t_count):
             mu_SP = 0
             
         elif P + S_n*N - S_a*A <= Active_crit:
-            mu_SP = 0.2 * ((P + N) / Active_crit) * S
+            mu_SP = 0.4 * ((P + N) / Active_crit) * S
             
         else:
-            mu_SP = 0.2 * S
+            mu_SP = 0.4 * S
             
         "Function for mu_QA"
 
@@ -166,11 +161,11 @@ def simulate(init_values, rates, t_count):
             
         "Function for mu_SA"
         
-        if P + N <= Immune_start:
+        if P + S_n*N <= Immune_start:
             mu_SA = 0
             
-        elif P + N <= Immune_crit:
-            mu_SA = 0.2 * ((P + N) / Immune_crit) * S
+        elif P + S_n*N <= Immune_crit:
+            mu_SA = 0.2 * ((P + S_n*N) / Immune_crit) * S
             
         else:
             mu_SA = 0.2 * S
@@ -181,11 +176,11 @@ def simulate(init_values, rates, t_count):
         
         "Function for D_P (dP/dt - pro-cytokine decay term"
 
-        D_P = 0.25 * P
+        D_P = 0.15 * P
         
         "Function for D_A (dA/dt - anti-cytokine decay term"
         
-        D_A = 0.25 * A
+        D_A = 0.1 * A
         
         "Function for D_S (S decay)"
         
@@ -193,15 +188,15 @@ def simulate(init_values, rates, t_count):
         
         "Function for D_Q (Q decay)"
         
-        D_Q = 0.25 * Q
+        D_Q = 0.1 * Q
         
         "Function for D_U (U decay)"
         
-        D_U = 0.05 * U
+        D_U = 0.005 * U
         
         #---------- 2b. Calculating derivatives ---------------------
         
-        dHdt = (E*R) + H_stable - D                                     # HSPC derivative
+        dHdt = E*(R+H_stable) - D                                     # HSPC derivative
         
         dNdt = (g_N*N) * (1-(N/N_inf)) - (k_nq * Q) - (k_ns * S)        # Pathogen derivative
         
@@ -250,6 +245,24 @@ def simulate(init_values, rates, t_count):
             A = 0
         
         T = Q + U + S
+        
+                    
+        #---------- mechanism for repeating pathogenic insult ---------------------
+        if repeat_path_insult:
+            
+            if count == 50 or count == 150:
+                N += 700
+                count += 1
+            else:
+                count += 1
+            
+        #--------- mechanism for artifically inflating HSPC numbers -------------
+        if inflate_H_bool:
+            if T <= 4000 and H_inflated == False:
+                H += 1000
+                count += 1
+            else:
+                count += 1
         
         H_output.append(H)
         N_output.append(N)
